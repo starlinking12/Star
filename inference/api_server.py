@@ -1,5 +1,6 @@
 """
 FastAPI server for OpenMythos inference.
+Provides /generate, /scan_vulnerability, and /health endpoints.
 """
 
 import argparse
@@ -17,6 +18,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from open_mythos import OpenMythos, MythosConfig
 
+
+# ============================================================================
+# Request/Response Models
+# ============================================================================
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -51,10 +56,24 @@ class ScanResponse(BaseModel):
     safe: bool
 
 
+class HealthResponse(BaseModel):
+    status: str
+    model_loaded: bool
+    device: str
+
+
+# ============================================================================
+# Global Variables
+# ============================================================================
+
 app = FastAPI(title="Mythos API", version="1.0.0")
 model = None
 device = "cpu"
 
+
+# ============================================================================
+# Startup Event
+# ============================================================================
 
 @app.on_event("startup")
 async def startup():
@@ -62,24 +81,47 @@ async def startup():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     cfg = MythosConfig()
     model = OpenMythos(cfg)
+    
+    # Try to load pretrained weights if they exist
+    checkpoint_path = Path("checkpoints/best_model.pt")
+    if checkpoint_path.exists():
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        if "model_state_dict" in checkpoint:
+            checkpoint = checkpoint["model_state_dict"]
+        model.load_state_dict(checkpoint, strict=False)
+        print(f"Loaded pretrained weights from {checkpoint_path}")
+    
     model.to(device)
     model.eval()
     print(f"Model loaded on {device}")
 
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "model_loaded": model is not None, "device": device}
+# ============================================================================
+# Health Check
+# ============================================================================
 
+@app.get("/health", response_model=HealthResponse)
+async def health():
+    return HealthResponse(
+        status="healthy" if model is not None else "loading",
+        model_loaded=model is not None,
+        device=device
+    )
+
+
+# ============================================================================
+# Generate Endpoint
+# ============================================================================
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate(request: GenerateRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
-    # Simple tokenization (placeholder)
-    input_ids = torch.tensor([[ord(c) % model.cfg.vocab_size for c in request.prompt[:100]]])
+    # Simple tokenization (replace with proper tokenizer in production)
+    input_ids = torch.tensor([[ord(c) % model.cfg.vocab_size for c in request.prompt[:1000]]])
     input_ids = input_ids.to(device)
+    prompt_len = input_ids.shape[1]
     
     with torch.no_grad():
         output_ids = model.generate(
@@ -91,18 +133,24 @@ async def generate(request: GenerateRequest):
             n_loops=request.n_loops,
         )
     
-    # Simple decoding (placeholder)
+    # Simple decoding (replace with proper tokenizer in production)
     output_text = ''.join(chr(id % 128) for id in output_ids[0].tolist() if id < 128)
+    generated_tokens = output_ids.shape[1] - prompt_len
     
-    return GenerateResponse(text=output_text, generated_tokens=output_ids.shape[1] - input_ids.shape[1])
+    return GenerateResponse(text=output_text, generated_tokens=generated_tokens)
 
+
+# ============================================================================
+# Scan Vulnerability Endpoint
+# ============================================================================
 
 @app.post("/scan_vulnerability", response_model=ScanResponse)
 async def scan_vulnerability(request: ScanRequest):
     if model is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
-    prompt = f"""Analyze the following {request.language} code for vulnerabilities:
+    # Build prompt for vulnerability analysis
+    prompt = f"""Analyze the following {request.language} code for security vulnerabilities:
 
 ```{request.language}
 {request.code}
