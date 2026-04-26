@@ -1,0 +1,24 @@
+model:
+  vocab_size: 32000
+  dim: 1024
+  n_heads: 8
+  n_kv_heads: 4
+  max_seq_len: 4096
+  max_loop_iters: 8
+  prelude_layers: 2
+  coda_layers: 1
+  attn_type: mla
+  n_experts: 16
+  n_shared_experts: 2
+  n_experts_per_tok: 2
+  expert_dim: 512
+  act_threshold: 0.99
+  lora_rank: 4
+
+training:
+  batch_size: 8
+  learning_rate: 3.0e-4
+  weight_decay: 0.1
+  grad_clip: 1.0
+  mixed_precision: true
+  num_epochs: 100
