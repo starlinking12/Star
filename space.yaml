@@ -1,0 +1,8 @@
+# Hugging Face Spaces configuration
+title: "Mythos API"
+emoji: "⚡"
+colorFrom: "purple"
+colorTo: "indigo"
+sdk: "docker"
+app_port: 7860
+hardware: "cpu-basic"
